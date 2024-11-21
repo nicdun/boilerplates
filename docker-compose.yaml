@@ -1,0 +1,80 @@
+ervices:
+  reverse-proxy:
+    image: traefik:v3.1
+    command:
+      - "--providers.docker"
+      - "--api.dashboard=true"
+      - "--entryPoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=dev@nd-solution.de"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dashboard.entrypoints=websecure
+      - traefik.http.routers.dashboard.tls.certresolver=myresolver
+      - traefik.http.routers.dashboard.rule=Host(`traefik.cloud.nicdun.dev`)
+      - traefik.http.routers.dashboard.service=api@internal
+      - traefik.http.routers.dashboard.middlewares=myauth
+      - traefik.http.middlewares.myauth.basicauth.users=nicdun:$$apr1$$6IbQM0cM$$eFuYOajZRU.aw21DZMoBw0
+    ports:
+      # The HTTP port
+      - "80:80"
+      # The HTTPS port
+      - "443:443"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+    volumes:
+      # traefik needs access to the Docker socket to listen for events
+      - /var/run/docker.sock:/var/run/docker.sock
+      # traefik needs access to the acme.json file to store the certificates
+      - letsencrypt:/letsencrypt
+  web:
+    image: nginx:latest
+    deploy:
+      mode: replicated
+      replicas: 2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nicdun.rule=Host(`cloud.nicdun.dev`)"
+      - "traefik.http.routers.nicdun.entrypoints=websecure"
+      - "traefik.http.routers.nicdun.tls.certresolver=myresolver"
+  db:
+    image: postgres:latest
+    restart: always
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    expose:
+      - 5432
+    # set shared memory limit when using docker-compose
+    shm_size: 128mb
+    # or set shared memory limit when deploy via swarm stack
+    #volumes:
+    #  - type: tmpfs
+    #    target: /dev/shm
+    #    tmpfs:
+    #      size: 134217728 # 128*2^20 bytes = 128Mb
+    environment:
+      POSTGRES_DB: cs-poc
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db-password
+    secrets:
+      - db-password
+    healthcheck:
+      test: [ "CMD", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  adminer:
+    image: adminer
+    restart: always
+volumes:
+  db-data:
+  letsencrypt:
+secrets:
+  db-password:
+    file: ~/db/password.txt
+
