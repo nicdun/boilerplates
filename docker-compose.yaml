@@ -1,4 +1,4 @@
-ervices:
+services:
   reverse-proxy:
     image: traefik:v3.1
     command:
