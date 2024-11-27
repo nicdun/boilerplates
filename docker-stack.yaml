@@ -1,3 +1,5 @@
+me: feedback-app
+
 services:
   reverse-proxy:
     image: traefik:v3.1
@@ -41,14 +43,10 @@ services:
       - "traefik.http.routers.nicdun.rule=Host(`localhost`)"
       - "traefik.http.routers.nicdun.entrypoints=websecure"
       - "traefik.http.routers.nicdun.tls.certresolver=myresolver"
+
   db:
     image: postgres:latest
     restart: always
-    volumes:
-      - db-data:/var/lib/postgresql/data
-    expose:
-      - 5432
-    # set shared memory limit when using docker-compose
     shm_size: 128mb
     # or set shared memory limit when deploy via swarm stack
     #volumes:
@@ -57,23 +55,32 @@ services:
     #    tmpfs:
     #      size: 134217728 # 128*2^20 bytes = 128Mb
     environment:
-      POSTGRES_DB: cs-poc
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD_FILE: /run/secrets/db-password
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_USER: admin
+      POSTGRES_DB: feedback-app
+    ports:
+      - 5432:5432
     secrets:
-      - db-password
-    healthcheck:
-      test: ["CMD", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - db_password
+    volumes:
+      - data:/var/lib/postgresql/data
 
   adminer:
     image: adminer
     restart: always
+    ports:
+      - 8080:8080
+
 volumes:
-  db-data:
-  letsencrypt:
+  data:
+    driver: local
+    # driver_opts:
+    #   type: none
+    #   device: "./postgresql/data" # Path to the data directory in the app folder
+    #   o: bind
+
 secrets:
-  db-password:
-    file: ~/db/password.txt
+  db_password:
+    external: true
+#networks:
+
