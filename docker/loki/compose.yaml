@@ -1,0 +1,51 @@
+# The Timing Issue
+# When Docker starts a container, the sequence of events is:
+# Container initialization begins
+# Logging drivers are initialized very early in the container startup process
+# Container networking is fully established
+# Docker DNS resolution becomes available
+# The rest of the container startup continues
+# The key issue is that logging drivers initialize before Docker DNS resolution is fully ready. This creates a race condition where the logging driver tries to connect to "loki:3100" before Docker's internal DNS can resolve the service name "loki" to an IP address.
+# Why Service Names Don't Work
+# Service names like "loki" in your docker-compose file rely on Docker's internal DNS system. However:
+# This DNS resolution isn't instantaneous during startup
+# The logging driver is initialized too early in the container lifecycle
+# When the logging driver tries to connect to "loki:3100", the name lookup fails
+# As a result, log messages can't be sent to Loki
+
+volumes:
+  data_loki:
+    driver: local
+
+x-logging: &default-logging
+  driver: loki
+  options:
+    loki-url: "http://localhost:3100/loki/api/v1/push" # do not use loki service name, it will not work
+    loki-retries: 2
+    loki-timeout: 1s
+    loki-max-backoff: 800ms
+    keep-file: "true"
+    mode: "non-blocking"
+
+services:
+  loki:
+    container_name: loki
+    image: docker.io/grafana/loki:3.4.2
+    command: "-config.file=/etc/loki/config.yaml"
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+    volumes:
+      - ./config/loki.yaml:/etc/loki/config.yaml:ro
+      - data_loki:/loki:rw
+    logging: *default-logging
+
+  promtail:
+    container_name: promtail
+    image: docker.io/grafana/promtail:3.4.2
+    command: "-config.file=/mnt/config/config.yaml"
+    volumes:
+      - ./config/promtail.yaml:/mnt/config/config.yaml:ro
+      - /var/log:/var/log:ro
+    restart: unless-stopped
+    logging: *default-logging

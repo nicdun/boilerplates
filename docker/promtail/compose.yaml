@@ -1,0 +1,9 @@
+services:
+  promtail:
+    container_name: promtail
+    image: docker.io/grafana/promtail:3.4.2
+    command: "-config.file=/mnt/config/config.yaml"
+    volumes:
+      - ./config/promtail.yaml:/mnt/config/config.yaml:ro
+      - /var/log:/var/log:ro
+    restart: unless-stopped
